@@ -16,8 +16,12 @@ const CREDENTIALS_FILE = path.join(__dirname, "fluid-skyline-440202-j3-f1a8b5104
 
 function getAuth(scopes) {
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-    return new google.auth.GoogleAuth({ credentials, scopes });
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+      return new google.auth.GoogleAuth({ credentials, scopes });
+    } catch (e) {
+      console.error("Error al parsear GOOGLE_CREDENTIALS_JSON:", e.message);
+    }
   }
   return new google.auth.GoogleAuth({ keyFile: CREDENTIALS_FILE, scopes });
 }
