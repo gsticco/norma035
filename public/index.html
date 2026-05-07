@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagnóstico NOM-035 — Grow Género y Trabajo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --teal:        #6ec2b7;
+      --teal-dark:   #4da89d;
+      --teal-light:  #e8f7f6;
+      --teal-mid:    #b8e4e0;
+      --violet:      #4f448a;
+      --violet-light:#f0eef9;
+      --navy:        #343f51;
+      --orange:      #ed9045;
+      --orange-light:#fdf1e6;
+      --white:       #ffffff;
+      --off-white:   #f7f7f5;
+      --gray-light:  #efefed;
+      --gray-mid:    #c8c8c4;
+      --gray-text:   #6b6b67;
+      --text:        #1e2530;
+      --radius:    14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Raleway', sans-serif;
+      background: var(--off-white);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 1rem 3rem;
+    }
+
+    /* Top bar */
+    .topbar {
+      width: 100%;
+      background: var(--navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.7rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .topbar-inner {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .topbar-contact {
+      font-size: 12px;
+      color: var(--teal-mid);
+    }
+    .topbar-contact a { color: var(--teal); text-decoration: none; }
+    .topbar-contact a:hover { text-decoration: underline; }
+
+    /* Logo */
+    .grow-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .grow-logo-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .grow-logo-text .name {
+      display: block;
+      font-family: 'Raleway', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--white);
+      line-height: 1.2;
+    }
+    .grow-logo-text .tagline {
+      display: block;
+      font-family: 'Raleway', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: var(--teal);
+      line-height: 1.2;
+    }
+
+    /* Container */
+    .container {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Header */
+    header { text-align: center; padding: 0.25rem 0 0.5rem; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: var(--teal-light);
+      color: var(--teal-dark);
+      border: 1px solid var(--teal-mid);
+      margin-bottom: 10px;
+    }
+    .badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+    }
+    header h1 {
+      font-family: 'Raleway', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 4px;
+      letter-spacing: -0.01em;
+    }
+    header h1 span { color: var(--teal-dark); }
+    .header-divider {
+      width: 36px; height: 3px;
+      background: var(--teal);
+      border-radius: 2px;
+      margin: 10px auto 10px;
+    }
+    header p {
+      font-size: 14px;
+      color: var(--gray-text);
+      line-height: 1.65;
+      max-width: 460px;
+      margin: 0 auto;
+    }
+
+    /* Progress */
+    .progress-wrap { display: flex; flex-direction: column; gap: 5px; }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--gray-text);
+      font-weight: 500;
+    }
+    .progress-label .step-name { color: var(--teal-dark); font-weight: 600; }
+    .progress-bar { display: flex; gap: 4px; }
+    .step {
+      height: 5px; flex: 1;
+      border-radius: 3px;
+      background: var(--gray-light);
+      transition: background 0.35s ease;
+    }
+    .step.done   { background: var(--teal-mid); }
+    .step.active { background: var(--teal); }
+
+    /* Chat box */
+    .chat-box {
+      background: var(--white);
+      border: 1px solid var(--gray-light);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 320px;
+    }
+
+    .message { display: flex; gap: 10px; align-items: flex-start; }
+    .message.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; flex-shrink: 0;
+    }
+    .avatar.bot  { background: var(--navy); color: var(--teal); font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 0.05em; }
+    .avatar.user { background: var(--violet-light); color: var(--violet); font-size: 11px; font-weight: 700; }
+
+    .bubble {
+      max-width: 82%;
+      padding: 11px 15px;
+      font-size: 14px;
+      line-height: 1.7;
+      border-radius: 16px;
+    }
+    .bubble.bot  { background: var(--off-white); color: var(--text); border: 1px solid var(--gray-light); border-top-left-radius: 4px; }
+    .bubble.user { background: var(--teal-light); color: var(--navy); border: 1px solid var(--teal-mid); border-top-right-radius: 4px; font-weight: 500; }
+
+    /* Typing */
+    .typing { display: flex; gap: 5px; align-items: center; padding: 11px 15px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: bounce 1.3s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; background: var(--violet); }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.5} 40%{transform:translateY(-6px);opacity:1} }
+
+    /* Input */
+    .input-row { display: flex; gap: 8px; align-items: flex-end; }
+    textarea {
+      flex: 1; resize: none;
+      border: 1px solid var(--gray-light);
+      border-radius: var(--radius-sm);
+      padding: 10px 13px;
+      font-size: 14px; font-family: 'Raleway', sans-serif;
+      color: var(--text); background: var(--white);
+      line-height: 1.5; height: 44px; max-height: 120px;
+      overflow-y: auto; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    textarea:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(110,194,183,0.15); }
+    textarea::placeholder { color: var(--gray-mid); }
+    textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    button.send {
+      height: 44px; padding: 0 20px;
+      border: none; border-radius: var(--radius-sm);
+      background: var(--teal); color: var(--navy);
+      font-size: 13px; font-weight: 700; font-family: 'Raleway', sans-serif;
+      letter-spacing: 0.02em;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: background 0.15s, transform 0.1s;
+    }
+    button.send:hover:not(:disabled) { background: var(--teal-dark); }
+    button.send:active:not(:disabled) { transform: scale(0.97); }
+    button.send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .restart-row { text-align: center; padding-top: 0.25rem; }
+    button.restart {
+      font-size: 13px; color: var(--teal-dark);
+      cursor: pointer; background: none; border: none;
+      font-family: 'Raleway', sans-serif; font-weight: 600;
+      text-decoration: underline; text-underline-offset: 3px;
+    }
+
+    footer {
+      font-size: 11px; color: var(--gray-text);
+      text-align: center; padding-top: 0.5rem; line-height: 1.7;
+    }
+    footer a { color: var(--teal-dark); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a href="https://www.generoytrabajo.com" target="_blank" class="grow-logo">
+        <svg class="grow-logo-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Grow - género y trabajo">
+          <circle cx="50" cy="50" r="50" fill="#6ec2b7"/>
+          <!-- Outer C arc of the G -->
+          <path d="M78 50 C78 65.5 65.5 78 50 78 C34.5 78 22 65.5 22 50 C22 34.5 34.5 22 50 22 C58.5 22 66.1 25.8 71.3 31.8 L63.5 38.8 C60.2 35.1 55.4 32.8 50 32.8 C40.4 32.8 32.8 40.4 32.8 50 C32.8 59.6 40.4 67.2 50 67.2 C57.8 67.2 64.4 62.2 66.8 55.2 L52 55.2 L52 45.5 L78 45.5 Z" fill="white"/>
+          <!-- Arrow tip pointing up-right -->
+          <path d="M70 24 L80 18 L76 30 Z" fill="white"/>
+        </svg>
+        <div class="grow-logo-text">
+          <span class="name">Grow</span>
+          <span class="tagline">género y trabajo</span>
+        </div>
+      </a>
+      <div class="topbar-contact">
+        <a href="mailto:info@generoytrabajo.com">info@generoytrabajo.com</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <header>
+      <div class="badge"><span class="badge-dot"></span>NOM-035-STPS-2018</div>
+      <h1>Diagnóstico de <span>cumplimiento</span></h1>
+      <div class="header-divider"></div>
+      <p>Respondé algunas preguntas y recibí un diagnóstico inicial con perspectiva de género interseccional.</p>
+    </header>
+
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>Progreso del diagnóstico</span>
+        <span class="step-name" id="step-name">Inicio</span>
+      </div>
+      <div class="progress-bar" id="progress">
+        <div class="step active" id="s0"></div>
+        <div class="step" id="s1"></div>
+        <div class="step" id="s2"></div>
+        <div class="step" id="s3"></div>
+        <div class="step" id="s4"></div>
+        <div class="step" id="s5"></div>
+        <div class="step" id="s6"></div>
+      </div>
+    </div>
+
+    <div class="chat-box" id="chat"></div>
+
+    <div class="input-row" id="input-row">
+      <textarea id="userInput" placeholder="Escribí tu respuesta aquí..."></textarea>
+      <button class="send" id="sendBtn" onclick="sendMessage()">Enviar →</button>
+    </div>
+
+    <footer>
+      Diagnóstico orientativo · Para cumplimiento oficial consultá las
+      <a href="https://www.stps.gob.mx" target="_blank">guías de referencia de la STPS</a> ·
+      <a href="https://www.generoytrabajo.com" target="_blank">generoytrabajo.com</a>
+    </footer>
+  </div>
+
+  <script>
+    let history = [];
+    let questionCount = 0;
+    let busy = false;
+    let empresaVerificada = false;
+    let empresaDetectada = "";
+
+    const TOTAL_STEPS = 7;
+    const STEP_LABELS = ["Inicio", "Datos org.", "Tamaño", "Pregunta 1", "Pregunta 2", "Pregunta 3", "Pregunta 4", "Finalizando"];
+
+    function updateProgress() {
+      for (let i = 0; i < TOTAL_STEPS; i++) {
+        const el = document.getElementById("s" + i);
+        if (!el) continue;
+        if (i < questionCount) el.className = "step done";
+        else if (i === questionCount) el.className = "step active";
+        else el.className = "step";
+      }
+      const nameEl = document.getElementById("step-name");
+      if (nameEl) nameEl.textContent = STEP_LABELS[Math.min(questionCount, STEP_LABELS.length - 1)];
+    }
+
+    function addMessage(role, text) {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+      div.className = "message " + role;
+      div.innerHTML = `
+        <div class="avatar ${role}">${role === "bot" ? "G·T" : "Yo"}</div>
+        <div class="bubble ${role}">${text.replace(/\n/g, "<br>")}</div>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function showTyping() {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+      div.className = "message bot";
+      div.id = "typing";
+      div.innerHTML = `
+        <div class="avatar bot">G·T</div>
+        <div class="bubble bot typing">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function removeTyping() {
+      const el = document.getElementById("typing");
+      if (el) el.remove();
+    }
+
+    function tryDetectEmpresa(userMessage) {
+      if (!empresaVerificada && history.length <= 4 && userMessage.length > 2) {
+        const lines = userMessage.split(/\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const m = line.match(/(?:empresa|organización|organizacion|compañía|compania)[:\s]+(.+)/i);
+          if (m) { empresaDetectada = m[1].trim(); return; }
+        }
+        if (lines[0] && lines[0].split(" ").length <= 6) {
+          empresaDetectada = lines[0];
+        }
+      }
+    }
+
+    async function checkEmpresaIfNeeded(userMessage) {
+      tryDetectEmpresa(userMessage);
+      if (empresaVerificada || !empresaDetectada) return null;
+      try {
+        const res = await fetch("/api/check-empresa", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empresa: empresaDetectada }),
+        });
+        const data = await res.json();
+        empresaVerificada = true;
+        return data.existe ? empresaDetectada : null;
+      } catch (e) {
+        empresaVerificada = true;
+        return null;
+      }
+    }
+
+    async function callAPI(userMessage) {
+      if (userMessage) {
+        const empresaYaExiste = await checkEmpresaIfNeeded(userMessage);
+        if (empresaYaExiste) {
+          history.push({ role: "user", content: userMessage });
+          history.push({
+            role: "assistant",
+            content: `[SISTEMA: La empresa "${empresaYaExiste}" ya realizó el autodiagnóstico anteriormente. Informá al usuario según las instrucciones de empresa ya registrada y no hagas más preguntas.]`
+          });
+        }
+        history.push({ role: "user", content: userMessage });
+      }
+
+      busy = true;
+      document.getElementById("sendBtn").disabled = true;
+      document.getElementById("userInput").disabled = true;
+      showTyping();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: history }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Error del servidor");
+        }
+        const data = await res.json();
+        const reply = data.reply;
+        history.push({ role: "assistant", content: reply });
+        removeTyping();
+        addMessage("bot", reply);
+        if (questionCount < TOTAL_STEPS - 1) questionCount++;
+        updateProgress();
+
+        const isDone =
+          reply.toLowerCase().includes("el informe llegará") ||
+          reply.toLowerCase().includes("gracias por completar");
+
+        if (isDone) {
+          document.getElementById("input-row").outerHTML = `
+            <div class="restart-row">
+              <button class="restart" onclick="location.reload()">↺ Nuevo diagnóstico</button>
+            </div>`;
+        }
+      } catch (err) {
+        removeTyping();
+        addMessage("bot", "Ocurrió un error: " + err.message + ". Intentá de nuevo.");
+      }
+
+      busy = false;
+      const input = document.getElementById("userInput");
+      const btn = document.getElementById("sendBtn");
+      if (input) { input.disabled = false; input.focus(); }
+      if (btn) btn.disabled = false;
+    }
+
+    function sendMessage() {
+      if (busy) return;
+      const input = document.getElementById("userInput");
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage("user", text);
+      input.value = "";
+      input.style.height = "44px";
+      callAPI(text);
+    }
+
+    document.getElementById("userInput").addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      setTimeout(() => {
+        this.style.height = "44px";
+        this.style.height = Math.min(this.scrollHeight, 120) + "px";
+      }, 0);
+    });
+
+    callAPI(null);
+  </script>
+</body>
+</html>
