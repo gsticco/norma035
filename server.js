@@ -11,9 +11,6 @@ const SHEET_ID = "1zU9eBp4FgOscu_itZOkvEF62xDabmxMtV-pvBTCHrNA";
 const DRIVE_FOLDER_ID = "1lK9c6e2P3be6iNJ8ek1MHHhmL04QRXTE";
 const CREDENTIALS_FILE = path.join(__dirname, "fluid-skyline-440202-j3-f1a8b510425a.json");
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-// Supports both local file (dev) and environment variable (Railway/production)
-
 function getAuth(scopes) {
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
     try {
@@ -26,473 +23,418 @@ function getAuth(scopes) {
   return new google.auth.GoogleAuth({ keyFile: CREDENTIALS_FILE, scopes });
 }
 
-function sheetsClient(auth) {
-  return google.sheets({ version: "v4", auth });
-}
-
-function docsClient(auth) {
-  return google.docs({ version: "v1", auth });
-}
-
-function driveClient(auth) {
-  return google.drive({ version: "v3", auth });
-}
-
-// ── Sheets: ensure headers ────────────────────────────────────────────────────
+function sheetsClient(auth) { return google.sheets({ version: "v4", auth }); }
+function docsClient(auth)   { return google.docs({ version: "v1", auth }); }
+function driveClient(auth)  { return google.drive({ version: "v3", auth }); }
 
 async function ensureHeaders() {
   const auth = getAuth(["https://www.googleapis.com/auth/spreadsheets"]);
   const sheets = sheetsClient(auth);
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: "Hoja1!A1",
-  });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Hoja1!A1" });
   if (!res.data.values || res.data.values.length === 0) {
     await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID,
-      range: "Hoja1!A1",
-      valueInputOption: "RAW",
-      requestBody: {
-        values: [[
-          "Fecha",
-          "Empresa",
-          "Persona de contacto",
-          "Email diagnóstico",
-          "Email informe",
-          "Tamaño empresa",
-          "P1 – Diagnóstico riesgo",
-          "P2 – Política prevención",
-          "P3 – Señales de alerta",
-          "P4 – Canal de reporte",
-          "P5 – Perspectiva de género",
-          "Puntaje total",
-          "Semáforo",
-          "Qué cumple",
-          "Qué le falta",
-          "Link informe Drive",
-          "Diagnóstico completo",
-        ]],
-      },
+      spreadsheetId: SHEET_ID, range: "Hoja1!A1", valueInputOption: "RAW",
+      requestBody: { values: [[
+        "Fecha","Empresa","Persona de contacto","Email diagnostico","Email informe","Tamano empresa","Pais",
+        "P1 Diagnostico psicosocial","P2 Acciones post-diagnostico","P3 Politica prevencion",
+        "P4 Eventos traumaticos","P5 Examenes medicos","P6 Registros documentales",
+        "P7 Senales alerta canal","P8 Liderazgos capacitaciones","P9 Perspectiva genero",
+        "Puntaje NOM-035 (max40)","Semaforo NOM-035","Puntaje Genero (max7)","Semaforo Genero",
+        "Link informe Drive",
+      ]] },
     });
+    console.log("Headers de Sheets creados OK");
   }
 }
-
-ensureHeaders().catch(console.error);
-
-// ── Sheets: check if empresa already diagnosed ────────────────────────────────
+ensureHeaders().catch(e => console.error("Error en ensureHeaders:", e));
 
 async function checkEmpresaExiste(nombreEmpresa) {
   try {
     const auth = getAuth(["https://www.googleapis.com/auth/spreadsheets.readonly"]);
     const sheets = sheetsClient(auth);
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: "Hoja1!B:B",
-    });
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Hoja1!B:B" });
     const rows = res.data.values || [];
     const nombre = nombreEmpresa.toLowerCase().trim();
     return rows.some((row) => row[0] && row[0].toLowerCase().trim() === nombre);
-  } catch (e) {
-    console.error("Error al verificar empresa:", e);
-    return false;
-  }
+  } catch (e) { console.error("Error al verificar empresa:", e); return false; }
 }
-
-// ── Sheets: append row ────────────────────────────────────────────────────────
 
 async function appendToSheet(rowData) {
+  console.log("Iniciando appendToSheet con", rowData.length, "columnas...");
   const auth = getAuth(["https://www.googleapis.com/auth/spreadsheets"]);
   const sheets = sheetsClient(auth);
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
-    range: "Hoja1!A1",
-    valueInputOption: "RAW",
+  const result = await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: "Hoja1!A1", valueInputOption: "RAW",
     requestBody: { values: [rowData] },
   });
+  console.log("appendToSheet OK — updatedRange:", result.data.updates && result.data.updates.updatedRange);
+  return result;
 }
 
-// ── Drive: create Google Doc with diagnosis ───────────────────────────────────
 
-async function createDriveDoc(nombreEmpresa, diagnosticoTexto, parsed) {
-  const auth = getAuth([
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/drive",
-  ]);
+async function createDriveDoc(nombreEmpresa, diagnosticoTexto, detalleTexto, parsed) {
+  const auth = getAuth(["https://www.googleapis.com/auth/documents","https://www.googleapis.com/auth/drive"]);
   const docs = docsClient(auth);
   const drive = driveClient(auth);
-
-  const fecha = new Date().toLocaleDateString("es-MX", {
-    timeZone: "America/Mexico_City",
-    year: "numeric", month: "long", day: "numeric",
-  });
-
-  const titulo = `Diagnóstico NOM-035 — ${nombreEmpresa}`;
-
-  // Create empty doc in the folder
+  const fecha = new Date().toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", year: "numeric", month: "long", day: "numeric" });
+  const pais = parsed.pais || "";
+  const titulo = "Diagnostico NOM-035 " + nombreEmpresa + (pais ? " – " + pais : "");
   const fileRes = await drive.files.create({
-    requestBody: {
-      name: titulo,
-      mimeType: "application/vnd.google-apps.document",
-      parents: [DRIVE_FOLDER_ID],
-    },
-    fields: "id,webViewLink",
-    supportsAllDrives: true,
+    requestBody: { name: titulo, mimeType: "application/vnd.google-apps.document", parents: [DRIVE_FOLDER_ID] },
+    fields: "id,webViewLink", supportsAllDrives: true,
   });
-
   const docId = fileRes.data.id;
   const docLink = fileRes.data.webViewLink;
+  const lbl = (v) => v === "VERDE" ? "VERDE" : v === "AMARILLO" ? "AMARILLO" : "ROJO";
 
-  // Semáforo emoji
-  const semaforoEmoji =
-    parsed.semaforo === "VERDE" ? "🟢" :
-    parsed.semaforo === "AMARILLO" ? "🟡" : "🔴";
-
-  // Build document content via batchUpdate
   const requests = [
-    // Title
-    { insertText: { location: { index: 1 }, text: `${titulo}\n` } },
-    { updateParagraphStyle: {
-        range: { startIndex: 1, endIndex: titulo.length + 1 },
-        paragraphStyle: { namedStyleType: "HEADING_1" },
-        fields: "namedStyleType",
-    }},
-
-    // Metadata block
-    { insertText: { location: { index: titulo.length + 2 }, text:
-      `Fecha: ${fecha}\nEmpresa: ${parsed.empresa || nombreEmpresa}\nPersona de contacto: ${parsed.contacto || "—"}\nEmail: ${parsed.email || "—"}\nTamaño de la empresa: ${parsed.tamano || "—"}\n\n`
-    }},
+    { insertText: { location: { index: 1 }, text: titulo + "\n" } },
+    { updateParagraphStyle: { range: { startIndex: 1, endIndex: titulo.length + 1 }, paragraphStyle: { namedStyleType: "HEADING_1" }, fields: "namedStyleType" }},
   ];
 
-  // Compute offset after title + metadata
-  const metaText = `Fecha: ${fecha}\nEmpresa: ${parsed.empresa || nombreEmpresa}\nPersona de contacto: ${parsed.contacto || "—"}\nEmail: ${parsed.email || "—"}\nTamaño de la empresa: ${parsed.tamano || "—"}\n\n`;
+  const metaText = "Fecha: " + fecha +
+    "\nEmpresa: " + (parsed.empresa || nombreEmpresa) +
+    "\nContacto: " + (parsed.contacto || "-") +
+    "\nEmail: " + (parsed.email || "-") +
+    "\nTamano: " + (parsed.tamano || "-") +
+    "\nPais: " + (parsed.pais || "-") + "\n\n";
+  requests.push({ insertText: { location: { index: titulo.length + 2 }, text: metaText } });
   let idx = titulo.length + 2 + metaText.length;
 
-  // Semáforo heading
-  const semaforoLine = `Resultado: ${semaforoEmoji} ${parsed.semaforo}\n`;
-  requests.push({ insertText: { location: { index: idx }, text: semaforoLine } });
-  requests.push({ updateParagraphStyle: {
-    range: { startIndex: idx, endIndex: idx + semaforoLine.length },
-    paragraphStyle: { namedStyleType: "HEADING_2" },
-    fields: "namedStyleType",
-  }});
-  idx += semaforoLine.length;
+  // --- Semáforos ---
+  const sem1 = "Semaforo NOM-035: " + lbl(parsed.semaforo_norma) + " (" + (parsed.puntaje_norma || "-") + "/40)\n";
+  requests.push({ insertText: { location: { index: idx }, text: sem1 } });
+  requests.push({ updateParagraphStyle: { range: { startIndex: idx, endIndex: idx + sem1.length }, paragraphStyle: { namedStyleType: "HEADING_2" }, fields: "namedStyleType" }});
+  idx += sem1.length;
 
-  // Qué cumple
-  const cumpleHeading = "Qué está cumpliendo bien\n";
-  requests.push({ insertText: { location: { index: idx }, text: cumpleHeading } });
-  requests.push({ updateParagraphStyle: {
-    range: { startIndex: idx, endIndex: idx + cumpleHeading.length },
-    paragraphStyle: { namedStyleType: "HEADING_3" },
-    fields: "namedStyleType",
-  }});
-  idx += cumpleHeading.length;
-  const cumpleBody = `${parsed.cumple || "—"}\n\n`;
-  requests.push({ insertText: { location: { index: idx }, text: cumpleBody } });
-  idx += cumpleBody.length;
+  const sem2 = "Semaforo Perspectiva de Genero: " + lbl(parsed.semaforo_genero) + " (" + (parsed.puntaje_genero || "-") + "/7)\n";
+  requests.push({ insertText: { location: { index: idx }, text: sem2 } });
+  requests.push({ updateParagraphStyle: { range: { startIndex: idx, endIndex: idx + sem2.length }, paragraphStyle: { namedStyleType: "HEADING_2" }, fields: "namedStyleType" }});
+  idx += sem2.length;
+  requests.push({ insertText: { location: { index: idx }, text: "\n" } });
+  idx += 1;
 
-  // Qué le falta
-  const faltaHeading = "Qué le falta mejorar\n";
-  requests.push({ insertText: { location: { index: idx }, text: faltaHeading } });
-  requests.push({ updateParagraphStyle: {
-    range: { startIndex: idx, endIndex: idx + faltaHeading.length },
-    paragraphStyle: { namedStyleType: "HEADING_3" },
-    fields: "namedStyleType",
-  }});
-  idx += faltaHeading.length;
-  const faltaBody = `${parsed.falta || "—"}\n\n`;
-  requests.push({ insertText: { location: { index: idx }, text: faltaBody } });
-  idx += faltaBody.length;
+  // --- Evaluación detallada por dimensión ---
+  if (detalleTexto && detalleTexto.trim().length > 10) {
+    const detH = "Evaluacion detallada por dimension\n";
+    requests.push({ insertText: { location: { index: idx }, text: detH } });
+    requests.push({ updateParagraphStyle: { range: { startIndex: idx, endIndex: idx + detH.length }, paragraphStyle: { namedStyleType: "HEADING_2" }, fields: "namedStyleType" }});
+    idx += detH.length;
+    const detB = detalleTexto.trim() + "\n\n";
+    requests.push({ insertText: { location: { index: idx }, text: detB } });
+    idx += detB.length;
+  }
 
-  // Puntaje
-  const puntajeHeading = "Puntaje por dimensión\n";
-  requests.push({ insertText: { location: { index: idx }, text: puntajeHeading } });
-  requests.push({ updateParagraphStyle: {
-    range: { startIndex: idx, endIndex: idx + puntajeHeading.length },
-    paragraphStyle: { namedStyleType: "HEADING_3" },
-    fields: "namedStyleType",
-  }});
-  idx += puntajeHeading.length;
-  const puntajeBody =
-    `P1 – Diagnóstico de riesgo psicosocial: ${parsed.p1_nivel || "—"}/5\n` +
-    `P2 – Política y prevención documentada: ${parsed.p2_nivel || "—"}/5\n` +
-    `P3 – Señales de alerta organizacional: ${parsed.p3_nivel || "—"}/5\n` +
-    `P4 – Canal de reporte y atención a casos: ${parsed.p4_nivel || "—"}/5\n` +
-    `P5 – Perspectiva de género transversal: ${parsed.p5_nivel || "—"}/5\n` +
-    `Puntaje total: ${parsed.puntaje_total || "—"}/25\n\n`;
-  requests.push({ insertText: { location: { index: idx }, text: puntajeBody } });
-  idx += puntajeBody.length;
+  // --- Resumen cumple/falta ---
+  for (const s of [
+    { heading: "Que esta cumpliendo bien\n", body: (parsed.cumple || "-") + "\n\n" },
+    { heading: "Que le falta mejorar\n",     body: (parsed.falta  || "-") + "\n\n" }
+  ]) {
+    requests.push({ insertText: { location: { index: idx }, text: s.heading } });
+    requests.push({ updateParagraphStyle: { range: { startIndex: idx, endIndex: idx + s.heading.length }, paragraphStyle: { namedStyleType: "HEADING_3" }, fields: "namedStyleType" }});
+    idx += s.heading.length;
+    requests.push({ insertText: { location: { index: idx }, text: s.body } });
+    idx += s.body.length;
+  }
 
-  // Diagnóstico completo
-  const diagHeading = "Diagnóstico completo\n";
-  requests.push({ insertText: { location: { index: idx }, text: diagHeading } });
-  requests.push({ updateParagraphStyle: {
-    range: { startIndex: idx, endIndex: idx + diagHeading.length },
-    paragraphStyle: { namedStyleType: "HEADING_2" },
-    fields: "namedStyleType",
-  }});
-  idx += diagHeading.length;
-  requests.push({ insertText: { location: { index: idx }, text: diagnosticoTexto + "\n" } });
+  // --- Puntaje por dimensión ---
+  const pH = "Puntaje por dimension\n";
+  requests.push({ insertText: { location: { index: idx }, text: pH } });
+  requests.push({ updateParagraphStyle: { range: { startIndex: idx, endIndex: idx + pH.length }, paragraphStyle: { namedStyleType: "HEADING_3" }, fields: "namedStyleType" }});
+  idx += pH.length;
+  const pB = [
+    "P1 Diagnostico psicosocial: " + (parsed.p1_nivel||"-") + "/5",
+    "P2 Acciones post-diagnostico: " + (parsed.p2_nivel||"-") + "/5",
+    "P3 Politica de prevencion: " + (parsed.p3_nivel||"-") + "/5",
+    "P4 Eventos traumaticos: " + (parsed.p4_nivel||"-") + "/5",
+    "P5 Examenes medicos: " + (parsed.p5_nivel||"-") + "/5",
+    "P6 Registros documentales: " + (parsed.p6_nivel||"-") + "/5",
+    "P7 Senales y canal: " + (parsed.p7_nivel||"-") + "/5",
+    "P8 Liderazgos: " + (parsed.p8_nivel||"-") + "/5",
+    "PUNTAJE NOM-035: " + (parsed.puntaje_norma||"-") + "/40",
+    "",
+    "P9 Perspectiva de genero: " + (parsed.p9_nivel||"-") + "/5",
+    "PUNTAJE GENERO: " + (parsed.puntaje_genero||"-") + "/7",
+    "",
+  ].join("\n");
+  requests.push({ insertText: { location: { index: idx }, text: pB } });
+  idx += pB.length;
 
   await docs.documents.batchUpdate({ documentId: docId, requestBody: { requests } });
-
   return { docId, docLink };
 }
 
-// ── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Eres una especialista en la NOM-035-STPS-2018 (Norma 035) de México, del equipo de Grow - Género y Trabajo. Tu misión es hacer un diagnóstico inicial sobre si una empresa cumple con la norma, integrando perspectiva de género interseccional.
+const SYSTEM_PROMPT = [
+  "Eres una especialista en NOM-035-STPS-2018 de Mexico, del equipo de Grow - Genero y Trabajo. Haces diagnosticos preliminares de cumplimiento de la norma con perspectiva de genero interseccional.",
+  "",
+  "FLUJO OBLIGATORIO — SEGUILO EN ORDEN",
+  "",
+  "PASO 0 — BIENVENIDA",
+  "Presentate con este mensaje exacto (podes adaptarlo levemente):",
+  "",
+  '"Hola, soy parte del equipo de Grow - Genero y Trabajo. Esta herramienta hace un diagnostico PRELIMINAR del cumplimiento de la NOM-035-STPS-2018, y va un paso mas alla: evalua tambien si las practicas incorporan perspectiva de genero interseccional, aunque la norma no lo requiera. Por eso los resultados incluyen dos semaforos: uno para cumplimiento de la norma y otro para perspectiva de genero.',
+  "",
+  "Al finalizar te enviamos por email el reporte completo con el detalle por dimension, lo que estan haciendo bien y los pasos recomendados. Para eso necesito cuatro datos:",
+  "1. Nombre de la organizacion",
+  "2. Pais donde opera",
+  "3. Nombre de la persona de contacto",
+  "4. Email de contacto",
+  "",
+  'Esta informacion es solo para uso interno de Grow - Genero y Trabajo. No la compartimos con terceros."',
+  "",
+  "Espera los tres datos en un solo mensaje antes de continuar.",
+  "",
+  "PASO 0B — VERIFICACION DE DUPLICADO",
+  "Verifica si la empresa ya hizo el diagnostico. Si ya existe, no hagas las preguntas — usa el mensaje de EMPRESA YA REGISTRADA.",
+  "",
+  "PASO 1 — TAMANO DE LA EMPRESA",
+  "Pregunta cuantos trabajadores tiene. Aclara: hasta 15 = obligaciones basicas, 16-50 = intermedias, mas de 50 = completas.",
+  "",
+  "LAS 9 PREGUNTAS — UNA A LA VEZ",
+  "",
+  "PREGUNTA 1",
+  '"De que manera identifica tu empresa si hay situaciones de estres, sobrecarga o malestar en el equipo? Con que herramienta o mecanismo lo hacen, con que frecuencia, y que hacen con esa informacion?"',
+  "REPREGUNTA GUIAS (si no las menciono): Han utilizado alguna de las Guias de Referencia de la STPS para la NOM-035 (Guia I, II o III), o se basaron en otro instrumento?",
+  "REPREGUNTA PERIODICIDAD (si no la menciono): Cuando fue la ultima vez que hicieron esa evaluacion?",
+  "",
+  "PREGUNTA 2",
+  '"Despues de hacer esa evaluacion: que hicieron con los resultados? Los analizaron por area, puesto o grupo? Implementaron algun programa de intervencion? Compartieron los resultados con el personal?"',
+  "",
+  "PREGUNTA 3",
+  '"Tu empresa tiene por escrito una politica que aborde especificamente: (1) prevencion de riesgos psicosociales, (2) prevencion de violencia laboral, y (3) promocion de un entorno organizacional favorable? Quien la conoce y como se comunica?"',
+  "",
+  "PREGUNTA 4",
+  '"La empresa tiene algun proceso para identificar a personas que hayan sufrido o presenciado eventos traumaticos graves — accidentes, asaltos, actos de violencia? Como las canalizan a atencion medica o psicologica?"',
+  "",
+  "PREGUNTA 5",
+  '"Cuando alguien muestra signos de afectacion emocional o psicologica severa, o cuando hay situaciones de violencia: realizan evaluaciones clinicas o los derivan a atencion medica o psicologica? Como funciona ese proceso?"',
+  "",
+  "PREGUNTA 6",
+  '"Llevan un registro formal de los resultados de las evaluaciones, las medidas adoptadas y los nombres de las personas evaluadas clinicamente? Donde se documenta y quien tiene acceso?"',
+  "",
+  "PREGUNTA 7",
+  '"Llevan registro de indicadores como rotacion, ausentismo o conflictos? Identifican si se concentran en algun area o grupo? Y cuando alguien vive una situacion dificil — conflicto, acoso, malestar — tiene un lugar claro a donde ir? Que pasa despues?"',
+  "",
+  "PREGUNTA 8",
+  '"Las personas en roles de liderazgo recibieron capacitacion especifica en gestion de conflictos, prevencion de violencia o liderazgo saludable? Los equipos tienen algun mecanismo para evaluar a sus lideres?"',
+  "",
+  "PREGUNTA 9",
+  '"Alguna vez analizaron si las mujeres, los hombres u otras identidades de genero del equipo viven de manera distinta el trabajo, el estres o las oportunidades? Eso influye en como disenan sus practicas de RRHH o interpretan los resultados?"',
+  "",
+  "REGLAS DURANTE LAS PREGUNTAS",
+  "- Una sola pregunta principal por mensaje.",
+  "- Si una pregunta tiene dos o mas aspectos y la persona solo responde uno, hace al menos una repregunta sobre lo que falto antes de pasar a la siguiente.",
+  "- Despues de cada respuesta, una linea breve sobre que implica para la norma.",
+  "- Tono profesional pero accesible.",
+  "",
+  "EVALUACION INTERNA (no mostrar al usuario)",
+  "Nivel 1: No existe practica ni intencion.",
+  "Nivel 2: Algo informal o esporadico, sin documentacion.",
+  "Nivel 3: Practica basica generica, sin analisis diferenciado.",
+  "Nivel 4: Proceso documentado, sin perspectiva de genero.",
+  "Nivel 5: Proceso documentado, analisis diferenciado por genero, con evidencia.",
+  "",
+  "Criterios: P1 sin Guias STPS = maximo 2. P2 sin difusion = maximo 3, sin programa = maximo 2. P3 sin 3 componentes = maximo 3. P4 sin proceso = nivel 1. P5 sin derivacion clinica = maximo 2.",
+  "PUNTAJE NOM-035 = suma P1 a P8 (min 8, max 40). ROJO=8-16, AMARILLO=17-28, VERDE=29-40.",
+  "PUNTAJE GENERO = nivel P9 mas hasta +2 si hubo analisis de genero espontaneo en P1-P8 (max 7). ROJO=1-2, AMARILLO=3-4, VERDE=5-7.",
+  "",
+  "DIAGNOSTICO FINAL — LO QUE MOSTRAS EN EL CHAT",
+  "Mostra SOLO esto, nada mas:",
+  "",
+  '"Diagnostico preliminar:',
+  "",
+  "Semaforo NOM-035: [ROJO/AMARILLO/VERDE]",
+  "[2-3 lineas sobre que implica para la empresa]",
+  "",
+  "Semaforo Perspectiva de Genero: [ROJO/AMARILLO/VERDE]",
+  "[2-3 lineas sobre que implica]",
+  "",
+  'Te enviamos el reporte completo al email que nos indicaste en las proximas horas. Para cualquier duda escribinos a info@generoytrabajo.com."',
+  "",
+  "NO agregues nada mas. No menciones componentes de la norma, no hagas listas, no invites a encuentros, no expliques que involucra el cumplimiento real. Solo los dos semaforos y ese cierre.",
+  "",
+  "PREGUNTA FINAL — EMAIL",
+  "Antes de mostrar el diagnostico, pregunta: Te enviamos el informe completo a [email del inicio] o preferis indicar otro email?",
+  "Valida el email: debe tener @, punto despues del @, dominio de 2+ chars. Si no cumple, pide que lo verifique.",
+  "Una vez confirmado el email, muestra el diagnostico y cerra con el texto indicado arriba.",
+  "Despues de ese cierre, el ULTIMO mensaje debe terminar con el bloque [DETALLE] y luego el bloque [DATOS].",
+  "",
+  "EMPRESA YA REGISTRADA",
+  "Si ya existe: pregunta si es sucursal diferente. Si si: continua desde PASO 1 con nombre completo. Si no: Escribinos a info@generoytrabajo.com y te compartimos el diagnostico anterior.",
+  "",
+  "BLOQUE [DETALLE] — GENERARLO JUNTO AL BLOQUE [DATOS], INVISIBLE PARA EL USUARIO",
+  "Este bloque va al final del ultimo mensaje, ANTES del [DATOS]. No se muestra en el chat. Contiene la evaluacion detallada de cada pregunta para el informe.",
+  "Formato exacto:",
+  "[DETALLE]",
+  "=== P1 – DIAGNOSTICO PSICOSOCIAL (X/5) ===",
+  "Lo que dijeron: [resumen de lo que dijo la empresa]",
+  "Que cumple: [aspecto concreto que ya esta bien]",
+  "Que falta o debe mejorar: [aspecto concreto que falta]",
+  "Referencia NOM-035: [articulo o apartado relevante]",
+  "",
+  "=== P2 – ACCIONES POST-DIAGNOSTICO (X/5) ===",
+  "Lo que dijeron: ...",
+  "Que cumple: ...",
+  "Que falta o debe mejorar: ...",
+  "Referencia NOM-035: ...",
+  "",
+  "[repetir para P3 a P9 con sus titulos: P3 POLITICA DE PREVENCION, P4 EVENTOS TRAUMATICOS, P5 EXAMENES MEDICOS, P6 REGISTROS DOCUMENTALES, P7 SENALES Y CANAL, P8 LIDERAZGOS Y CAPACITACIONES, P9 PERSPECTIVA DE GENERO]",
+  "",
+  "=== ACCION PRIORITARIA ===",
+  "[La medida mas urgente y concreta que debe tomar la empresa]",
+  "[/DETALLE]",
+  "",
+  "BLOQUE DE DATOS — AL FINAL DEL ULTIMO MENSAJE (despues del [DETALLE])",
+  '[DATOS]{"empresa":"x","contacto":"x","email":"x","email_informe":"x","tamano":"x","pais":"x","p1":"x","p2":"x","p3":"x","p4":"x","p5":"x","p6":"x","p7":"x","p8":"x","p9":"x","p1_nivel":0,"p2_nivel":0,"p3_nivel":0,"p4_nivel":0,"p5_nivel":0,"p6_nivel":0,"p7_nivel":0,"p8_nivel":0,"p9_nivel":0,"puntaje_norma":0,"puntaje_genero":0,"semaforo_norma":"ROJO","semaforo_genero":"ROJO","cumple":"x","falta":"x"}[/DATOS]',
+].join("\n");
 
-═══════════════════════════════════════
-FLUJO COMPLETO — SEGUÍ ESTE ORDEN EXACTO
-═══════════════════════════════════════
-
-PASO 0 — BIENVENIDA Y DATOS ORGANIZACIONALES
-Presentate brevemente. Explicá que antes de empezar necesitás tres datos:
-1. Nombre de la organización
-2. Nombre de la persona de contacto
-3. Email de contacto (para seguimiento interno de Grow)
-
-Pedí los tres en un solo mensaje. Esperá la respuesta antes de continuar.
-
-PASO 0B — VERIFICACIÓN DE DUPLICADO
-Una vez que tengas el nombre de la empresa, el sistema verificará automáticamente si ya realizó el autodiagnóstico. Si ya existe, NO hagas las preguntas. Mostrá el mensaje de empresa ya registrada (ver sección al final).
-
-PASO 1 — TAMAÑO DE LA EMPRESA
-Preguntá cuántos trabajadores tiene la empresa. Aclarár que esto determina las obligaciones bajo la norma: hasta 15 trabajadores tienen obligaciones básicas, de 16 a 50 intermedias, y más de 50 obligaciones completas.
-
-═══════════════════════════════════════
-LAS 5 PREGUNTAS — UNA A LA VEZ
-═══════════════════════════════════════
-
-PREGUNTA 1
-Hacé esta pregunta exactamente así, sin título ni encabezado:
-"¿De qué manera identifica tu empresa si hay situaciones de estrés, sobrecarga o malestar en el equipo? ¿Con qué herramienta o mecanismo, y qué hacen con esa información?"
-
-⚠️ REPREGUNTA OBLIGATORIA EN P1: Después de que respondan, si NO mencionaron explícitamente las Guías de Referencia de la STPS (Guía I, II o III de la NOM-035), preguntá específicamente: "¿Han utilizado alguna de las Guías de Referencia de la STPS para la NOM-035 (Guía I, II o III) para hacer ese diagnóstico, o se basaron en otro tipo de instrumento?" Esperá la respuesta antes de continuar a P2.
-
-PREGUNTA 2
-Hacé esta pregunta exactamente así, sin título ni encabezado:
-"¿Tu empresa tiene por escrito alguna política o compromiso sobre cómo prevenir el malestar, el acoso o la violencia en el trabajo? ¿Quién la conoce y cómo se comunica?"
-
-PREGUNTA 3
-Hacé esta pregunta exactamente así, sin título ni encabezado:
-"¿Llevan registro de rotación, ausentismo o conflictos en el equipo? ¿Saben si esas situaciones se concentran más en algún área, tipo de puesto o grupo de personas?"
-
-PREGUNTA 4
-Hacé esta pregunta exactamente así, sin título ni encabezado:
-"Cuando alguien en tu empresa vive una situación difícil — un conflicto, una situación de acoso o algo que le genera malestar — ¿tiene un lugar claro a dónde ir? ¿Cómo funciona ese proceso y qué pasa después?"
-
-PREGUNTA 5
-Hacé esta pregunta exactamente así, sin título ni encabezado:
-"Pensando en todo lo que mencionaste: ¿alguna vez han analizado si las mujeres, los hombres u otros grupos del equipo viven de manera distinta el trabajo, el estrés o las oportunidades? ¿Eso influye en cómo diseñan sus prácticas de RRHH?"
-
-═══════════════════════════════════════
-REGLAS DURANTE LAS PREGUNTAS
-═══════════════════════════════════════
-- Una sola pregunta por mensaje.
-- Después de cada respuesta, comentá brevemente (1 línea) qué implica para la norma y continuá.
-- Si la persona no entiende un concepto, explicalo con palabras simples.
-- Tono: profesional pero accesible.
-
-═══════════════════════════════════════
-EVALUACIÓN INTERNA — RÚBRICA POR PREGUNTA
-═══════════════════════════════════════
-Evaluá cada respuesta en una escala del 1 al 5. Usá esta rúbrica:
-
-Nivel 1: No existe práctica ni intención. Riesgo inmediato de incumplimiento.
-Nivel 2: Hay algo informal o esporádico, sin documentación ni proceso.
-Nivel 3: Existe una práctica básica pero genérica, sin análisis ni enfoque diferenciado.
-Nivel 4: Hay proceso documentado pero sin perspectiva de género ni análisis por grupos.
-Nivel 5: Proceso documentado, con análisis diferenciado por género y grupos, con evidencia.
-
-Para P1 específicamente: si usan las Guías de Referencia STPS → suma +1 al nivel. Si no las usan pero tienen otro instrumento válido → nivel 3 como máximo.
-
-Puntaje total = suma de los 5 niveles (mínimo 5, máximo 25).
-
-═══════════════════════════════════════
-DIAGNÓSTICO FINAL
-═══════════════════════════════════════
-
-SEMÁFORO:
-🔴 ROJO (5–10 pts): Cumplimiento bajo — riesgos significativos, lejos de cumplir la norma.
-🟡 AMARILLO (11–17 pts): Cumplimiento medio — hay avances pero faltan elementos clave.
-🟢 VERDE (18–25 pts): Cumplimiento alto — cumple los aspectos principales, foco en mejora continua.
-
-El diagnóstico debe incluir:
-1. Semáforo con explicación de 2–3 líneas
-2. "Qué está cumpliendo bien:" — listado concreto
-3. "Qué le falta mejorar:" — listado concreto con justificación citando lo que dijeron
-4. Puntaje por pregunta (P1: X/5, P2: X/5, etc.) con una línea de justificación por cada una
-5. "Acción prioritaria:" — la más urgente
-
-Cerrá con:
-"Para continuar podés participar de un encuentro online con el equipo especializado de Grow - Género y Trabajo para resolver dudas, o contactarte a info@generoytrabajo.com para solicitar un presupuesto por la asesoría técnica. Para un diagnóstico completo se recomienda aplicar las guías de referencia de la STPS."
-
-═══════════════════════════════════════
-PREGUNTA FINAL — EMAIL PARA INFORME
-═══════════════════════════════════════
-Después del diagnóstico, preguntá:
-"¿Te enviamos el informe completo a [email que dieron al inicio] o preferís indicar otro email?"
-
-VALIDACIÓN DE EMAIL OBLIGATORIA: Antes de confirmar, verificá que el email tenga formato válido:
-- Debe contener exactamente un @
-- Debe tener al menos un punto (.) después del @
-- El dominio debe tener al menos 2 caracteres después del último punto (por ejemplo: .com, .mx, .org)
-- Ejemplos inválidos: pepa@com, usuario@, @dominio.com, texto sin arroba
-- Si el email no cumple estas condiciones, decí: "Ese email no parece tener un formato válido (por ejemplo, falta el dominio como .com o .mx). ¿Podés verificarlo e indicármelo de nuevo?"
-- No avances hasta tener un email con formato válido.
-
-Una vez confirmado el email válido, respondé: "Perfecto, el informe llegará a [email confirmado] en las próximas horas. ¡Gracias por completar el diagnóstico!"
-
-═══════════════════════════════════════
-EMPRESA YA REGISTRADA
-═══════════════════════════════════════
-Si el sistema indica que la empresa ya realizó el diagnóstico, NO cierres la conversación. En cambio, preguntá:
-"Veo que [nombre empresa] ya realizó el autodiagnóstico con Grow anteriormente. ¿Se trata de una sucursal o sede diferente? Si es así, por favor aclará el nombre completo con la sucursal (por ejemplo: 'Babsa — Sucursal Monterrey') y continuamos con el diagnóstico. Si es la misma sede, podés escribirnos a info@generoytrabajo.com para revisar los resultados anteriores."
-
-Si confirman que es una sucursal diferente, tomá el nombre completo con sucursal como nombre de empresa y continuá el flujo normalmente desde PASO 1.
-Si confirman que es la misma sede, cerrá con: "Perfecto, escribinos a info@generoytrabajo.com y te compartimos el diagnóstico anterior."
-
-═══════════════════════════════════════
-BLOQUE DE DATOS — AL TERMINAR TODO
-═══════════════════════════════════════
-Al final de tu último mensaje (después de confirmar el email del informe), incluí este bloque invisible para el usuario:
-
-[DATOS]{"empresa":"nombre","contacto":"nombre persona contacto","email":"email diagnóstico","email_informe":"email para enviar informe","tamano":"número o rango de trabajadores tal como lo dijo la empresa","p1":"respuesta textual p1","p2":"respuesta textual p2","p3":"respuesta textual p3","p4":"respuesta textual p4","p5":"respuesta textual p5","p1_nivel":0,"p2_nivel":0,"p3_nivel":0,"p4_nivel":0,"p5_nivel":0,"puntaje_total":0,"semaforo":"ROJO/AMARILLO/VERDE","cumple":"resumen de lo que cumple","falta":"resumen de lo que le falta"}[/DATOS]`;
-
-// ── Check empresa endpoint ────────────────────────────────────────────────────
 
 app.post("/api/check-empresa", async (req, res) => {
   const { empresa } = req.body;
   if (!empresa) return res.json({ existe: false });
-  try {
-    const existe = await checkEmpresaExiste(empresa);
-    res.json({ existe });
-  } catch (e) {
-    console.error(e);
-    res.json({ existe: false });
-  }
+  try { res.json({ existe: await checkEmpresaExiste(empresa) }); }
+  catch (e) { console.error(e); res.json({ existe: false }); }
 });
-
-// ── Chat endpoint ─────────────────────────────────────────────────────────────
 
 app.post("/api/chat", async (req, res) => {
   const { messages } = req.body;
   const msgs = (!messages || !Array.isArray(messages) || messages.length === 0)
-    ? [{ role: "user", content: "Inicia el diagnóstico." }]
+    ? [{ role: "user", content: "Inicia el diagnostico." }]
     : messages;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key no configurada." });
 
-  // ── Server-side empresa duplicate check ─────────────────────────────────────
-  // On the second user message (first real response with org data), check Sheets
   const userMessages = msgs.filter(m => m.role === "user");
   if (userMessages.length === 2) {
-    // User just provided org name/contact/email — try to extract empresa name
     const lastUserMsg = userMessages[userMessages.length - 1].content || "";
     const lines = lastUserMsg.split(/\n/).map(l => l.trim()).filter(Boolean);
     let empresaNombre = "";
     for (const line of lines) {
-      const m = line.match(/(?:empresa|organización|organizacion|compañía|compania)[:\s]+(.+)/i);
+      const m = line.match(/(?:empresa|organizaci[oó]n|compa[nñ][ií]a)[:\s]+(.+)/i);
       if (m) { empresaNombre = m[1].trim(); break; }
     }
-    if (!empresaNombre && lines[0] && lines[0].split(" ").length <= 8) {
-      empresaNombre = lines[0];
-    }
+    if (!empresaNombre && lines[0] && lines[0].split(" ").length <= 8) empresaNombre = lines[0];
     if (empresaNombre) {
       const yaExiste = await checkEmpresaExiste(empresaNombre);
       if (yaExiste) {
-        msgs.push({
-          role: "assistant",
-          content: `[SISTEMA INTERNO — NO MOSTRAR AL USUARIO: La empresa "${empresaNombre}" ya tiene un diagnóstico registrado en la base de datos. Aplicá el flujo de EMPRESA YA REGISTRADA: preguntá si es una sucursal diferente antes de continuar.]`
-        });
-        // Add a dummy user turn to keep alternating roles valid
+        msgs.push({ role: "assistant", content: "[SISTEMA INTERNO: La empresa " + empresaNombre + " ya tiene diagnostico registrado. Aplica flujo EMPRESA YA REGISTRADA.]" });
         msgs.push({ role: "user", content: "(continuar)" });
       }
     }
   }
 
-  try {
+  const callAnthropic = async (retries, delayMs) => {
+    if (retries === undefined) retries = 3;
+    if (delayMs === undefined) delayMs = 2000;
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1800,
-        system: SYSTEM_PROMPT,
-        messages: msgs,
-      }),
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 4000, system: SYSTEM_PROMPT, messages: msgs }),
     });
+    if (response.status === 529 && retries > 0) {
+      await new Promise(r => setTimeout(r, delayMs));
+      return callAnthropic(retries - 1, delayMs * 2);
+    }
+    return response;
+  };
 
+  try {
+    const response = await callAnthropic();
     if (!response.ok) {
       const err = await response.json();
-      return res.status(response.status).json({ error: err.error?.message || "Error de la API." });
+      const status = response.status;
+      const msg = status === 529
+        ? "El servicio esta temporalmente saturado. Intenta de nuevo en unos segundos."
+        : (err.error && err.error.message ? err.error.message : "Error de la API.");
+      return res.status(status).json({ error: msg });
     }
 
     const data = await response.json();
-    let reply = data.content.map((b) => b.text || "").join("");
+    let reply = data.content.map(function(b) { return b.text || ""; }).join("");
 
-    // ── Extract [DATOS] block and save ───────────────────────────────────────
-    const dataMatch = reply.match(/\[DATOS\](.*?)\[\/DATOS\]/s);
+    // Extraer [DETALLE] (va al Drive doc, no al chat)
+    let detalleTexto = "";
+    const detalleMatch = reply.match(/\[DETALLE\]([\s\S]*?)\[\/DETALLE\]/);
+    if (detalleMatch) {
+      detalleTexto = detalleMatch[1].trim();
+      reply = reply.replace(/\[DETALLE\][\s\S]*?\[\/DETALLE\]/, "").trim();
+      console.log("Bloque [DETALLE] extraido, longitud:", detalleTexto.length);
+    }
+
+    // Extraer [DATOS]
+    const dataMatch = reply.match(/\[DATOS\]([\s\S]*?)\[\/DATOS\]/);
+    console.log("Bloque [DATOS] encontrado:", !!dataMatch);
+    if (!dataMatch) {
+      console.log("=== REPLY SIN [DATOS] (primeros 500 chars) ===");
+      console.log(reply.substring(0, 500));
+      console.log("=== FIN ===");
+    }
+
     if (dataMatch) {
+      let parsed;
       try {
-        const parsed = JSON.parse(dataMatch[1]);
-        const fecha = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
-        const diagnosticoLimpio = reply.replace(/\[DATOS\].*?\[\/DATOS\]/s, "").trim();
-
-        // Create Google Doc
-        let docLink = "";
-        try {
-          const { docLink: link } = await createDriveDoc(
-            parsed.empresa || "Empresa",
-            diagnosticoLimpio,
-            parsed
-          );
-          docLink = link;
-        } catch (driveErr) {
-          console.error("Error al crear Doc en Drive:", driveErr);
-        }
-
-        // Save to Sheets
-        await appendToSheet([
-          fecha,
-          parsed.empresa || "",
-          parsed.contacto || "",
-          parsed.email || "",
-          parsed.email_informe || "",
-          parsed.tamano || "",
-          parsed.p1 || "",
-          parsed.p2 || "",
-          parsed.p3 || "",
-          parsed.p4 || "",
-          parsed.p5 || "",
-          parsed.puntaje_total || "",
-          parsed.semaforo || "",
-          parsed.cumple || "",
-          parsed.falta || "",
-          docLink,
-          diagnosticoLimpio,
-        ]);
-      } catch (e) {
-        console.error("Error al guardar datos:", e);
+        parsed = JSON.parse(dataMatch[1]);
+      } catch (jsonErr) {
+        console.error("Error al parsear [DATOS] JSON:", jsonErr.message);
+        console.error("JSON recibido:", dataMatch[1].substring(0, 300));
       }
 
-      reply = reply.replace(/\[DATOS\].*?\[\/DATOS\]/s, "").trim();
+      if (parsed) {
+        const fecha = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+        const diagnosticoLimpio = reply.replace(/\[DATOS\][\s\S]*?\[\/DATOS\]/, "").trim();
+
+        let docLink = "";
+        try {
+          const result = await createDriveDoc(parsed.empresa || "Empresa", diagnosticoLimpio, detalleTexto, parsed);
+          docLink = result.docLink;
+          console.log("Doc creado en Drive:", docLink);
+        } catch (driveErr) {
+          console.error("Error al crear Doc en Drive:", driveErr.message);
+        }
+
+        try {
+          await appendToSheet([
+            fecha,
+            parsed.empresa       || "",
+            parsed.contacto      || "",
+            parsed.email         || "",
+            parsed.email_informe || "",
+            parsed.tamano        || "",
+            parsed.pais          || "",
+            parsed.p1_nivel      || "",
+            parsed.p2_nivel      || "",
+            parsed.p3_nivel      || "",
+            parsed.p4_nivel      || "",
+            parsed.p5_nivel      || "",
+            parsed.p6_nivel      || "",
+            parsed.p7_nivel      || "",
+            parsed.p8_nivel      || "",
+            parsed.p9_nivel      || "",
+            parsed.puntaje_norma  || "",
+            parsed.semaforo_norma || "",
+            parsed.puntaje_genero || "",
+            parsed.semaforo_genero|| "",
+            docLink,
+          ]);
+          console.log("Datos guardados en Sheets OK");
+        } catch (sheetsErr) {
+          console.error("Error al guardar en Sheets — mensaje:", sheetsErr.message);
+          console.error("Error al guardar en Sheets — codigo:", sheetsErr.code);
+          console.error("Error al guardar en Sheets — status:", sheetsErr.status);
+          if (sheetsErr.errors) console.error("Errores detallados:", JSON.stringify(sheetsErr.errors));
+        }
+      }
+      reply = reply.replace(/\[DATOS\][\s\S]*?\[\/DATOS\]/, "").trim();
     }
 
     res.json({ reply });
   } catch (error) {
-    console.error("Error al llamar a la API:", error);
+    console.error("Error al llamar a la API:", error.message);
     res.status(500).json({ error: "Error interno del servidor." });
   }
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+app.listen(PORT, function() { console.log("Servidor corriendo en http://localhost:" + PORT); });
